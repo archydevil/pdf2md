@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Github } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface GitHubStarButtonProps {
   repoUrl?: string
@@ -16,11 +17,11 @@ export function GitHubStarButton({
     <Button
       variant="outline"
       size="sm"
-      className={`flex items-center gap-2 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 ${className}`}
+      className={cn("h-9 px-3 text-sm font-medium", className)}
       onClick={() => window.open(repoUrl, "_blank", "noopener,noreferrer")}
     >
-      <Github className="h-4 w-4" />
-      <span>Star on GitHub</span>
+      <Github className="h-4 w-4 mr-2" />
+      Star on GitHub
     </Button>
   )
 }
