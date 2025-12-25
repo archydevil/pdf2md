@@ -3,6 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 interface MarkdownPreviewProps {
   markdown: string
@@ -16,13 +17,13 @@ export function MarkdownPreview({ markdown, className }: MarkdownPreviewProps) {
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            pre: ({ node, ...props }) => (
+            pre: ({ ...props }) => (
               <pre
                 {...props}
                 className="overflow-x-auto p-4 bg-muted rounded text-sm [overflow-wrap:anywhere]"
               />
             ),
-            code: ({ node, inline, ...props }: any) => (
+            code: ({ inline, ...props }: { inline?: boolean; className?: string; children?: React.ReactNode }) => (
               <code
                 {...props}
                 className={cn(
@@ -51,12 +52,19 @@ export function MarkdownPreview({ markdown, className }: MarkdownPreviewProps) {
               </td>
             ),
             img: ({ src, alt }) => (
-              <img src={src || "/placeholder.svg"} alt={alt} className="max-w-full h-auto rounded" />
+              <Image
+                src={typeof src === "string" ? src : "/placeholder.svg"}
+                alt={alt || ""}
+                width={800}
+                height={600}
+                className="max-w-full h-auto rounded"
+                unoptimized
+              />
             ),
             p: ({ children }) => (
               <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed">{children}</p>
             ),
-            a: ({ node, href, children }) => (
+            a: ({ href, children }) => (
               <a
                 href={href}
                 target="_blank"

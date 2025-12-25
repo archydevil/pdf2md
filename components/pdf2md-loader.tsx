@@ -11,7 +11,7 @@ interface PDF2MDLoaderProps {
 }
 
 export default function PDF2MDLoader({ file, isConverting, onLoad, onConversionComplete, onError }: PDF2MDLoaderProps) {
-  const [pdf2md, setPdf2md] = useState<any>(null)
+  const [pdf2md, setPdf2md] = useState<((buffer: ArrayBuffer) => Promise<string>) | null>(null)
 
   // Load the pdf2md library
   useEffect(() => {
