@@ -3,15 +3,12 @@
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Upload, File, AlertCircle } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 
-// Import the PDF2MD library dynamically to avoid SSR issues
 import dynamic from "next/dynamic"
 
-// This component will only be loaded in the browser
 const PDF2MDLoader = dynamic(() => import("@/components/pdf2md-loader"), { ssr: false })
 
 interface FileUploaderProps {
@@ -28,13 +25,11 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
   const [progress, setProgress] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Reset progress when starting a new conversion
   useEffect(() => {
     if (isConverting) {
       setProgress(0)
       const interval = setInterval(() => {
         setProgress((prev) => {
-          // Simulate progress up to 90% (the last 10% will be set when conversion completes)
           if (prev < 90) {
             return prev + 1
           }
@@ -89,7 +84,6 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
 
   const handleFile = (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
-      // 10MB limit
       setError("File size exceeds 10MB limit")
       return
     }
@@ -104,8 +98,7 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
     setError(null)
 
     try {
-      // The actual conversion will be handled by the PDF2MDLoader component
-      // This is just a placeholder for the button click handler
+      // Conversion handled by PDF2MDLoader
     } catch (error) {
       console.error("Error converting PDF:", error)
       setError("Failed to convert PDF. Please try a different file.")
@@ -115,7 +108,6 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
 
   return (
     <>
-      {/* Hidden PDF2MD loader component that handles the actual conversion */}
       <PDF2MDLoader
         file={selectedFile}
         isConverting={isConverting}
@@ -136,51 +128,69 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
       {error && (
         <Alert variant="destructive" className="mb-4">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <Card
-        className={`border-2 ${
-          dragActive ? "border-primary border-dashed bg-primary/5" : "border-dashed"
-        } p-8 text-center`}
+      <div
+        className={`
+          relative rounded-lg border border-dashed p-8 text-center transition-colors
+          ${dragActive
+            ? "border-foreground/30 bg-muted/50"
+            : "border-border hover:border-foreground/20 hover:bg-muted/30"
+          }
+        `}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
       >
-        <div className="flex flex-col items-center justify-center gap-4">
-          <div className="bg-muted rounded-full p-3">
-            <Upload className="h-6 w-6" />
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="rounded-full bg-muted p-2.5">
+            <Upload className="h-5 w-5 text-muted-foreground" />
           </div>
 
           <div>
-            <h3 className="text-lg font-medium mb-1">Upload your PDF</h3>
-            <p className="text-sm text-muted-foreground mb-2">Drag and drop your file here or click to browse</p>
-
-            {selectedFile && (
-              <div className="flex items-center justify-center gap-2 text-sm font-medium text-primary">
-                <File className="h-4 w-4" />
-                {selectedFile.name}
-              </div>
-            )}
+            <p className="text-sm font-medium text-foreground mb-1">
+              Drop your PDF here
+            </p>
+            <p className="text-sm text-muted-foreground">
+              or click to browse
+            </p>
           </div>
 
+          {selectedFile && (
+            <div className="flex items-center gap-2 text-sm text-foreground mt-1">
+              <File className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{selectedFile.name}</span>
+            </div>
+          )}
+
           {isConverting ? (
-            <div className="w-full max-w-xs">
-              <Progress value={progress} className="h-2 mb-2" />
-              <p className="text-xs text-muted-foreground">Converting... {progress}%</p>
+            <div className="w-full max-w-xs mt-2">
+              <Progress value={progress} className="h-1.5" />
+              <p className="text-xs text-muted-foreground mt-2">Converting... {progress}%</p>
             </div>
           ) : (
-            <div className="flex gap-4">
-              <Button onClick={() => inputRef.current?.click()} disabled={isConverting}>
-                Select PDF
+            <div className="flex gap-2 mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={isConverting}
+                className="h-8 px-3 text-sm"
+              >
+                Select file
               </Button>
 
               {selectedFile && pdf2mdLoaded && (
-                <Button onClick={handleConvert} disabled={isConverting}>
-                  Convert to Markdown
+                <Button
+                  size="sm"
+                  onClick={handleConvert}
+                  disabled={isConverting}
+                  className="h-8 px-3 text-sm"
+                >
+                  Convert
                 </Button>
               )}
             </div>
@@ -188,7 +198,7 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
 
           <input ref={inputRef} type="file" accept=".pdf" className="hidden" onChange={handleChange} />
         </div>
-      </Card>
+      </div>
     </>
   )
 }
