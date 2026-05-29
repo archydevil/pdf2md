@@ -1,50 +1,78 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Upload, File, AlertCircle } from "lucide-react"
+import { Upload, File as FileIcon, AlertCircle, CheckCircle2, Loader2, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
+import { usePdf2md } from "@/hooks/use-pdf2md"
 
-import dynamic from "next/dynamic"
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
-const PDF2MDLoader = dynamic(() => import("@/components/pdf2md-loader"), { ssr: false })
+export interface ConversionResult {
+  name: string
+  markdown: string
+}
+
+type ItemStatus = "pending" | "converting" | "done" | "error"
+
+interface FileItem {
+  id: string
+  file: File
+  status: ItemStatus
+  markdown?: string
+  error?: string
+}
 
 interface FileUploaderProps {
-  onConversionComplete: (markdown: string, file: File) => void
+  onConversionComplete: (results: ConversionResult[]) => void
   isConverting: boolean
   setIsConverting: (isConverting: boolean) => void
 }
 
 export function FileUploader({ onConversionComplete, isConverting, setIsConverting }: FileUploaderProps) {
   const [dragActive, setDragActive] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [items, setItems] = useState<FileItem[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [pdf2mdLoaded, setPdf2mdLoaded] = useState(false)
-  const [progress, setProgress] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (isConverting) {
-      setProgress(0)
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev < 90) {
-            return prev + 1
-          }
-          return prev
-        })
-      }, 100)
+  const { ready, loadError, convert } = usePdf2md()
 
-      return () => clearInterval(interval)
+  const addFiles = (fileList: FileList | File[]) => {
+    setError(null)
+    const incoming = Array.from(fileList)
+    const accepted: FileItem[] = []
+    const rejected: string[] = []
+
+    for (const file of incoming) {
+      if (file.type !== "application/pdf") {
+        rejected.push(`${file.name}: not a PDF`)
+        continue
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        rejected.push(`${file.name}: exceeds 10MB`)
+        continue
+      }
+      accepted.push({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        status: "pending",
+      })
     }
-  }, [isConverting])
+
+    if (rejected.length > 0) {
+      setError(`Skipped ${rejected.length} file(s): ${rejected.join(", ")}`)
+    }
+
+    if (accepted.length > 0) {
+      setItems((prev) => [...prev, ...accepted])
+    }
+  }
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-
     if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true)
     } else if (e.type === "dragleave") {
@@ -56,79 +84,78 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-    setError(null)
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0]
-      if (file.type === "application/pdf") {
-        handleFile(file)
-      } else {
-        setError("Please upload a PDF file")
-      }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFiles(e.dataTransfer.files)
     }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault()
-    setError(null)
-
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-      if (file.type === "application/pdf") {
-        handleFile(file)
-      } else {
-        setError("Please upload a PDF file")
-      }
+    if (e.target.files && e.target.files.length > 0) {
+      addFiles(e.target.files)
     }
+    // Reset so selecting the same file again re-triggers change
+    e.target.value = ""
   }
 
-  const handleFile = (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File size exceeds 10MB limit")
-      return
-    }
+  const removeItem = (id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id))
+  }
 
-    setSelectedFile(file)
+  const clearAll = () => {
+    setItems([])
+    setError(null)
   }
 
   const handleConvert = async () => {
-    if (!selectedFile || !pdf2mdLoaded) return
+    if (!ready || items.length === 0 || isConverting) return
 
     setIsConverting(true)
     setError(null)
 
-    try {
-      // Conversion handled by PDF2MDLoader
-    } catch (error) {
-      console.error("Error converting PDF:", error)
-      setError("Failed to convert PDF. Please try a different file.")
-      setIsConverting(false)
+    // Reset statuses for a fresh run
+    setItems((prev) =>
+      prev.map((item) => ({ ...item, status: "pending", markdown: undefined, error: undefined })),
+    )
+
+    const results: ConversionResult[] = []
+
+    for (const item of items) {
+      setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, status: "converting" } : it)))
+      try {
+        const markdown = await convert(item.file)
+        results.push({ name: item.file.name, markdown })
+        setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, status: "done", markdown } : it)))
+      } catch (err) {
+        console.error("Error converting PDF:", err)
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === item.id
+              ? { ...it, status: "error", error: "Conversion failed (corrupted or unsupported file)." }
+              : it,
+          ),
+        )
+      }
+    }
+
+    setIsConverting(false)
+
+    if (results.length > 0) {
+      onConversionComplete(results)
+    } else {
+      setError("None of the files could be converted.")
     }
   }
 
+  const doneCount = items.filter((i) => i.status === "done").length
+  const hasPending = items.some((i) => i.status === "pending")
+
   return (
     <>
-      <PDF2MDLoader
-        file={selectedFile}
-        isConverting={isConverting}
-        onLoad={() => setPdf2mdLoaded(true)}
-        onConversionComplete={(markdown) => {
-          if (selectedFile) {
-            setProgress(100)
-            onConversionComplete(markdown, selectedFile)
-            setIsConverting(false)
-          }
-        }}
-        onError={(errorMsg) => {
-          setError(errorMsg)
-          setIsConverting(false)
-        }}
-      />
-
-      {error && (
+      {(error || loadError) && (
         <Alert variant="destructive" className="mb-4">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{loadError ?? error}</AlertDescription>
         </Alert>
       )}
 
@@ -152,53 +179,101 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
 
           <div>
             <p className="text-sm font-medium text-foreground mb-1">
-              Drop your PDF here
+              Drop your PDFs here
             </p>
             <p className="text-sm text-muted-foreground">
-              or click to browse
+              or click to browse — you can select multiple files
             </p>
           </div>
 
-          {selectedFile && (
-            <div className="flex items-center gap-2 text-sm text-foreground mt-1">
-              <File className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{selectedFile.name}</span>
-            </div>
-          )}
-
-          {isConverting ? (
-            <div className="w-full max-w-xs mt-2">
-              <Progress value={progress} className="h-1.5" />
-              <p className="text-xs text-muted-foreground mt-2">Converting... {progress}%</p>
-            </div>
-          ) : (
+          {!isConverting && (
             <div className="flex gap-2 mt-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => inputRef.current?.click()}
-                disabled={isConverting}
                 className="h-8 px-3 text-sm"
               >
-                Select file
+                Select files
               </Button>
 
-              {selectedFile && pdf2mdLoaded && (
-                <Button
-                  size="sm"
-                  onClick={handleConvert}
-                  disabled={isConverting}
-                  className="h-8 px-3 text-sm"
-                >
-                  Convert
+              {items.length > 0 && ready && hasPending && (
+                <Button size="sm" onClick={handleConvert} className="h-8 px-3 text-sm">
+                  Convert {items.length > 1 ? `${items.length} files` : "file"}
                 </Button>
               )}
             </div>
           )}
 
-          <input ref={inputRef} type="file" accept=".pdf" className="hidden" onChange={handleChange} />
+          {isConverting && (
+            <div className="w-full max-w-xs mt-2">
+              <Progress value={items.length ? (doneCount / items.length) * 100 : 0} className="h-1.5" />
+              <p className="text-xs text-muted-foreground mt-2">
+                Converting {Math.min(doneCount + 1, items.length)} of {items.length}...
+              </p>
+            </div>
+          )}
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf"
+            multiple
+            className="hidden"
+            aria-label="Upload PDF files"
+            onChange={handleChange}
+          />
         </div>
       </div>
+
+      {/* File queue */}
+      {items.length > 0 && (
+        <div className="mt-4 rounded-lg border border-border bg-card">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+            <p className="text-sm font-medium text-foreground">
+              {items.length} file{items.length > 1 ? "s" : ""}
+              {doneCount > 0 && (
+                <span className="text-muted-foreground font-normal"> · {doneCount} converted</span>
+              )}
+            </p>
+            {!isConverting && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAll}
+                className="h-7 px-2 text-xs text-muted-foreground"
+              >
+                Clear all
+              </Button>
+            )}
+          </div>
+          <ul className="divide-y divide-border">
+            {items.map((item) => (
+              <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="flex-1 truncate text-sm text-foreground">{item.file.name}</span>
+                {item.status === "converting" && (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                )}
+                {item.status === "done" && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />}
+                {item.status === "error" && (
+                  <span className="shrink-0 text-xs text-destructive">Failed</span>
+                )}
+                {item.status === "pending" && !isConverting && (
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label={`Remove ${item.file.name}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </>
   )
 }
