@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 # Conservative fallback patterns (used only when Presidio is unavailable).
 _FALLBACK_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -41,14 +42,54 @@ def _placeholder(label: str) -> str:
     return f"[[{label}_{uuid.uuid4().hex[:8]}]]"
 
 
+def _drop_overlaps(results: list) -> list:  # noqa: ANN001 - presidio RecognizerResult
+    """Keep only non-overlapping spans, preferring higher score then longer.
+
+    Presidio can return overlapping detections (e.g. EMAIL_ADDRESS + URL over
+    the same substring). Replacing overlapping spans corrupts the text and
+    breaks reversibility, so we greedily select a non-overlapping subset.
+    """
+    ordered = sorted(results, key=lambda r: (r.score, r.end - r.start), reverse=True)
+    kept: list = []
+    for r in ordered:
+        if any(not (r.end <= k.start or r.start >= k.end) for k in kept):
+            continue
+        kept.append(r)
+    return kept
+
+
+@lru_cache(maxsize=4)
+def _build_analyzer(language: str):  # noqa: ANN202 - presidio types are optional
+    """Build (and cache) a Presidio analyzer wired to a spaCy model.
+
+    The default ``AnalyzerEngine()`` only knows English (``en_core_web_lg``).
+    For Italian we point the NLP engine at ``it_core_news_sm`` and register the
+    Italian predefined recognizers (fiscal code, VAT, etc.).
+    """
+    from presidio_analyzer import AnalyzerEngine  # type: ignore[import-not-found]
+    from presidio_analyzer.nlp_engine import (  # type: ignore[import-not-found]
+        NlpEngineProvider,
+    )
+
+    spacy_model = "it_core_news_sm" if language == "it" else "en_core_web_lg"
+    provider = NlpEngineProvider(
+        nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": language, "model_name": spacy_model}],
+        }
+    )
+    nlp_engine = provider.create_engine()
+    return AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=[language])
+
+
 def _try_presidio(text: str, language: str) -> AnonymizationResult | None:
     try:
-        from presidio_analyzer import AnalyzerEngine  # type: ignore[import-not-found]
+        analyzer = _build_analyzer(language)
     except Exception:
         return None
 
-    analyzer = AnalyzerEngine()
     results = analyzer.analyze(text=text, language=language)
+    results = _drop_overlaps(results)
     results = sorted(results, key=lambda r: r.start, reverse=True)
     mapping: dict[str, str] = {}
     entities: list[dict] = []
