@@ -26,6 +26,7 @@ from app.bridges.meetily import import_sqlite
 from app.config import get_settings
 from app.ollama_client import OllamaClient
 from app.pipeline.chat import ChatEngine
+from app.pipeline.graph import build_graph, query_graph
 from app.pipeline.ingest import Ingestor
 from app.pipeline.parse import parse_file_async, parse_markdown
 from app.pipeline.retrieve import Retriever
@@ -101,6 +102,11 @@ class EgressBody(BaseModel):
     text: str
     language: str = "it"
     require_approval: bool = True
+
+
+class GraphQueryBody(BaseModel):
+    query: str
+    hops: int = 1
 
 
 @app.get("/health")
@@ -286,3 +292,17 @@ async def privacy_egress_preview(body: EgressBody) -> dict:
         "degraded": envelope.anonymization.degraded,
         "n_redacted": len(envelope.anonymization.mapping),
     }
+
+
+@app.post("/graph/build")
+async def graph_build() -> dict:
+    graph = await run_in_threadpool(build_graph, _store)
+    return {"nodes": len(graph.nodes), "edges": len(graph.edges)}
+
+
+@app.post("/graph/query")
+async def graph_query(body: GraphQueryBody) -> dict:
+    result = await run_in_threadpool(query_graph, body.query, body.hops)
+    if not result.get("built"):
+        raise HTTPException(status_code=409, detail="Grafo non ancora costruito. Esegui POST /graph/build.")
+    return result
