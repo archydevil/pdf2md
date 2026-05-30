@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Database, Send, Loader2, MessageSquare } from "lucide-react"
+import { Database, Send, Loader2, MessageSquare, Cloud, HardDrive } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   kbChat,
@@ -25,6 +25,7 @@ export function KbChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [provider, setProvider] = useState<"local" | "cloud">("local")
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export function KbChat() {
     setTurns((prev) => [...prev, { role: "user", content: query }])
     setLoading(true)
     try {
-      const res = await kbChat({ query, rerank: true })
+      const res = await kbChat({ query, rerank: true, provider })
       setTurns((prev) => [
         ...prev,
         { role: "assistant", content: res.answer, citations: res.citations },
@@ -101,6 +102,28 @@ export function KbChat() {
           <span className="text-sm font-medium text-foreground">Chiedi alla Knowledge Base</span>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setProvider((p) => (p === "local" ? "cloud" : "local"))}
+            title={
+              provider === "local"
+                ? "Modello locale (Ollama). Clicca per usare il cloud."
+                : "Modello cloud (richiede KB_ALLOW_CLOUD_EGRESS=true; PII anonimizzata prima dell'invio). Clicca per tornare locale."
+            }
+            className={cn(
+              "flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors",
+              provider === "cloud"
+                ? "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                : "border-border hover:bg-muted",
+            )}
+          >
+            {provider === "cloud" ? (
+              <Cloud className="h-3 w-3" />
+            ) : (
+              <HardDrive className="h-3 w-3" />
+            )}
+            {provider === "cloud" ? "Cloud" : "Locale"}
+          </button>
           <span
             className={cn(
               "h-1.5 w-1.5 rounded-full",

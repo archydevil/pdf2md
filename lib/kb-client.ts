@@ -87,6 +87,7 @@ export async function kbChat(params: {
   query: string
   k?: number
   rerank?: boolean
+  provider?: "local" | "cloud"
 }): Promise<KBChatResponse> {
   const res = await fetch(`${KB_BASE_URL}/chat`, {
     method: "POST",
@@ -95,6 +96,7 @@ export async function kbChat(params: {
       query: params.query,
       k: params.k ?? 6,
       rerank: params.rerank ?? true,
+      provider: params.provider ?? "local",
     }),
   })
   if (!res.ok) {

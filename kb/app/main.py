@@ -37,14 +37,11 @@ from app.store.lancedb_store import KBStore
 
 app = FastAPI(title="KB Forge", version="0.1.0")
 
-# Local-only UI (Next.js dev on 3000 / Electron). Air-gap friendly: localhost only.
+# Local UI by default (Next.js dev on 3000 / Electron). Configure KB_CORS_ORIGINS
+# to add your domain when running the sidecar/UI in the cloud.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "app://.",  # Electron packaged origin
-    ],
+    allow_origins=get_settings().cors_origin_list(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +76,7 @@ class ChatBody(BaseModel):
     where: str | None = None
     rerank: bool | None = None
     model: str | None = None
+    provider: str = "local"  # "local" (Ollama) or "cloud" (gated by egress policy)
 
 
 class AnalysisBody(BaseModel):
@@ -210,9 +208,17 @@ async def search(body: SearchBody) -> dict:
 
 @app.post("/chat")
 async def chat(body: ChatBody) -> dict:
-    result = await _chat.answer(
-        body.query, k=body.k, where=body.where, rerank=body.rerank, model=body.model
-    )
+    try:
+        result = await _chat.answer(
+            body.query,
+            k=body.k,
+            where=body.where,
+            rerank=body.rerank,
+            model=body.model,
+            provider=body.provider,
+        )
+    except EgressDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return {
         "query": body.query,
         "answer": result.answer,

@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.cloud_client import CloudClient
+from app.config import get_settings
 from app.ollama_client import OllamaClient
 from app.pipeline.retrieve import Retriever
+from app.privacy.egress import EgressDenied, prepare_egress
 from app.schema import RetrievedChunk
 
 _SYSTEM = (
@@ -58,9 +61,15 @@ def _build_context(chunks: list[RetrievedChunk]) -> tuple[str, list[Citation]]:
 
 
 class ChatEngine:
-    def __init__(self, retriever: Retriever | None = None, ollama: OllamaClient | None = None) -> None:
+    def __init__(
+        self,
+        retriever: Retriever | None = None,
+        ollama: OllamaClient | None = None,
+        cloud: CloudClient | None = None,
+    ) -> None:
         self.retriever = retriever or Retriever()
         self.ollama = ollama or OllamaClient()
+        self.cloud = cloud or CloudClient()
 
     async def answer(
         self,
@@ -69,6 +78,7 @@ class ChatEngine:
         where: str | None = None,
         rerank: bool | None = None,
         model: str | None = None,
+        provider: str = "local",
     ) -> ChatAnswer:
         chunks = await self.retriever.search(query, k=k, where=where, rerank=rerank)
         if not chunks:
@@ -79,5 +89,34 @@ class ChatEngine:
             f"DOMANDA: {query}\n\n"
             "Rispondi in italiano, citando i passaggi con [n]."
         )
-        text = await self.ollama.generate(prompt, system=_SYSTEM, temperature=0.1, model=model)
+        if provider == "cloud":
+            text = await self._answer_cloud(prompt, model=model)
+        else:
+            text = await self.ollama.generate(
+                prompt, system=_SYSTEM, temperature=0.1, model=model
+            )
         return ChatAnswer(answer=text, citations=citations)
+
+    async def _answer_cloud(self, prompt: str, model: str | None = None) -> str:
+        """Send to the cloud provider, gated by the egress policy.
+
+        With ``cloud_anonymize`` on (default), the prompt is anonymized via the
+        egress gateway before leaving the machine and the answer is restored
+        with the reversible mapping. The gateway raises ``EgressDenied`` when the
+        air-gap switch (``KB_ALLOW_CLOUD_EGRESS``) is off.
+        """
+        settings = get_settings()
+        if settings.cloud_anonymize:
+            envelope = prepare_egress(prompt, require_approval=False)
+            raw = await self.cloud.generate(
+                envelope.safe_text, system=_SYSTEM, temperature=0.1, model=model
+            )
+            return envelope.restore(raw)
+        if not settings.allow_cloud_egress:
+            raise EgressDenied(
+                "Egress verso il cloud disabilitato (air-gap). "
+                "Imposta KB_ALLOW_CLOUD_EGRESS=true per consentirlo."
+            )
+        return await self.cloud.generate(
+            prompt, system=_SYSTEM, temperature=0.1, model=model
+        )

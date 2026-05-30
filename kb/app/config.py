@@ -27,6 +27,24 @@ class Settings(BaseSettings):
     # Larger model for heavier local enrichment/classification when available.
     llm_model_heavy: str = Field(default="qwen2.5:32b")
 
+    # --- Cloud LLM (optional, OpenAI-compatible) --------------------------
+    # Used only when a request opts into provider="cloud" AND the egress gate
+    # below allows it. Works with OpenAI, OpenRouter, Together, Groq, a remote
+    # Ollama/vLLM, etc. — any /v1/chat/completions endpoint.
+    cloud_base_url: str = Field(default="https://api.openai.com/v1")
+    cloud_api_key: str = Field(default="")
+    cloud_model: str = Field(default="gpt-4o-mini")
+    # Anonymize the prompt (PII -> reversible placeholders) before it leaves the
+    # machine, then de-anonymize the cloud answer. Strongly recommended.
+    cloud_anonymize: bool = Field(default=True)
+
+    # --- API server --------------------------------------------------------
+    # Allowed CORS origins (comma-separated). Defaults to local UI only; add
+    # your domain here when you run the sidecar/UI in the cloud.
+    cors_origins: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000,app://.",
+    )
+
     # --- Retrieval ---------------------------------------------------------
     embed_dim: int = Field(default=1024, description="bge-m3 dense dimension")
     top_k: int = Field(default=8)
@@ -47,6 +65,9 @@ class Settings(BaseSettings):
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.lancedb_dir.mkdir(parents=True, exist_ok=True)
+
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache

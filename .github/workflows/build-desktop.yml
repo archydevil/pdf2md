@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
 
+# GitHub will force JS actions onto Node 24 from mid-2026; opt in now to avoid
+# the deprecation warnings on Node 20.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   windows:
     name: Windows (.exe)
