@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Analytics } from '@vercel/analytics/react'
+import { Toaster } from '@/components/ui/sonner'
+
+// The standalone desktop build runs offline, so skip web-only analytics.
+const isDesktop = process.env.BUILD_TARGET === 'desktop'
 
 export const metadata: Metadata = {
   title: 'PDF to Markdown Converter – Free Unlimited, Secure, 100% Browser-Based',
@@ -81,8 +85,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <Toaster />
         {children}
-        <Analytics />
+        {!isDesktop && <Analytics />}
       </body>
     </html>
   )

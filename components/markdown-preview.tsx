@@ -1,13 +1,23 @@
 "use client"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
-import Image from "next/image"
 
 interface MarkdownPreviewProps {
   markdown: string
   className?: string
+}
+
+/**
+ * Allow inline base64 images (extracted from PDFs) while keeping react-markdown's
+ * default URL sanitization for every other attribute (links, etc.).
+ */
+function urlTransform(url: string, key: string, node: { tagName?: string }): string {
+  if (key === "src" && node.tagName === "img" && url.startsWith("data:image/")) {
+    return url
+  }
+  return defaultUrlTransform(url)
 }
 
 export function MarkdownPreview({ markdown, className }: MarkdownPreviewProps) {
@@ -16,6 +26,7 @@ export function MarkdownPreview({ markdown, className }: MarkdownPreviewProps) {
       <div className={cn("prose prose-sm dark:prose-invert max-w-none break-words", className)}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          urlTransform={urlTransform}
           components={{
             pre: ({ ...props }) => (
               <pre
@@ -51,16 +62,14 @@ export function MarkdownPreview({ markdown, className }: MarkdownPreviewProps) {
                 {children}
               </td>
             ),
-            img: ({ src, alt }) => (
-              <Image
-                src={typeof src === "string" ? src : "/placeholder.svg"}
-                alt={alt || ""}
-                width={800}
-                height={600}
-                className="max-w-full h-auto rounded"
-                unoptimized
-              />
-            ),
+            img: ({ src, alt }) => {
+              const url = typeof src === "string" && src ? src : null
+              if (!url) return null
+              // Native <img> handles arbitrary data: URLs from extracted PDF
+              // images better than next/image (which warns on empty/long URLs).
+              // eslint-disable-next-line @next/next/no-img-element
+              return <img src={url} alt={alt || ""} className="max-w-full h-auto rounded" />
+            },
             p: ({ children }) => (
               <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed">{children}</p>
             ),

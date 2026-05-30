@@ -2,11 +2,21 @@
   "name": "pdf2md",
   "version": "0.1.0",
   "private": true,
+  "description": "Convert PDF files to Markdown, plain text or Word locally, fully offline.",
+  "author": "Michael Ryaboy",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "desktop:export": "cross-env BUILD_TARGET=desktop next build",
+    "desktop": "npm run desktop:export && electron .",
+    "desktop:dev": "cross-env ELECTRON_START_URL=http://localhost:3000 electron .",
+    "dist": "npm run desktop:export && electron-builder",
+    "dist:mac": "npm run desktop:export && electron-builder --mac",
+    "dist:win": "npm run desktop:export && electron-builder --win",
+    "dist:all": "npm run desktop:export && electron-builder --mac --win"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -45,10 +55,12 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
+    "docx": "^9.7.1",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.454.0",
-    "next": "^16.1.1",
+    "next": "^16.2.6",
     "next-themes": "^0.4.4",
     "react": "^19",
     "react-day-picker": "^9.13.0",
@@ -61,6 +73,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "unpdf": "^1.6.2",
     "vaul": "^1.1.2",
     "zod": "^3.24.1"
   },
@@ -71,6 +84,9 @@
     "@types/react-dom": "^19",
     "@typescript-eslint/eslint-plugin": "^8.50.1",
     "@typescript-eslint/parser": "^8.50.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.7.1",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.1",
     "eslint-plugin-react": "^7.37.5",
@@ -78,5 +94,50 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "co.pdftomarkdown.app",
+    "productName": "PDF to Markdown",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "out/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    }
   }
 }
