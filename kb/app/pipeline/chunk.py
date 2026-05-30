@@ -11,7 +11,7 @@ a real tokenizer later if you need exact budgets.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 

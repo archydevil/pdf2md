@@ -10,7 +10,7 @@ from app.ollama_client import OllamaClient
 from app.pipeline.chunk import ChunkConfig, chunk_markdown
 from app.pipeline.enrich import Enricher
 from app.pipeline.parse import ParseResult
-from app.schema import Chunk, Classification, Document, Provenance, SourceKind, stable_hash
+from app.schema import Chunk, Classification, Document, Provenance, stable_hash
 from app.store.lancedb_store import KBStore
 
 

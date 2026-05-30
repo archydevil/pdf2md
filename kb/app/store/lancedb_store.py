@@ -13,7 +13,7 @@ import lancedb
 import pyarrow as pa
 
 from app.config import get_settings
-from app.schema import Chunk, Classification, Provenance, RetrievedChunk, SourceKind
+from app.schema import Chunk, Classification, Provenance, RetrievedChunk
 
 _TABLE = "chunks"
 
@@ -120,7 +120,7 @@ class KBStore:
         return RetrievedChunk(chunk=chunk, score=score)
 
     def search_vector(self, vector: list[float], k: int, where: str | None = None) -> list[RetrievedChunk]:
-        q = self.table.search(vector).metric("cosine").limit(k)
+        q = self.table.search(vector).metric("cosine").limit(k)  # type: ignore[attr-defined]
         if where:
             q = q.where(where, prefilter=True)
         results = q.to_list()
