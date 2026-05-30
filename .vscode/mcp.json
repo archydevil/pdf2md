@@ -7,5 +7,16 @@
 			"password": true
 		}
 	],
-	"servers": {}
+	"servers": {
+		"kb-forge": {
+			"type": "stdio",
+			"command": "${workspaceFolder}/kb/.venv/bin/python",
+			"args": ["-m", "app.mcp_server"],
+			"cwd": "${workspaceFolder}/kb",
+			"env": {
+				"KB_LANCEDB_DIR": "${workspaceFolder}/kb/.kbdata/lancedb",
+				"KB_DATA_DIR": "${workspaceFolder}/kb/.kbdata"
+			}
+		}
+	}
 }
