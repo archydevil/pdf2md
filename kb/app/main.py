@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.analysis.engine import AnalysisEngine, list_templates
@@ -29,6 +30,19 @@ from app.schema import SourceKind
 from app.store.lancedb_store import KBStore
 
 app = FastAPI(title="KB Forge", version="0.1.0")
+
+# Local-only UI (Next.js dev on 3000 / Electron). Air-gap friendly: localhost only.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "app://.",  # Electron packaged origin
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _store = KBStore()
 _ollama = OllamaClient()

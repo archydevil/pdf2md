@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Analytics } from '@vercel/analytics/react'
+import { Toaster } from '@/components/ui/sonner'
 
 // The standalone desktop build runs offline, so skip web-only analytics.
 const isDesktop = process.env.BUILD_TARGET === 'desktop'
@@ -84,6 +85,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <Toaster />
         {children}
         {!isDesktop && <Analytics />}
       </body>

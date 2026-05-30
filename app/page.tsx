@@ -11,10 +11,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, Code, Download, Copy, Check, Archive, ChevronDown } from "lucide-react"
+import { FileText, Code, Download, Copy, Check, Archive, ChevronDown, Database, Loader2 } from "lucide-react"
 import { FaqSection } from "@/components/faq-section"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { GitHubStarButton } from "@/components/github-star-button"
+import { toast } from "sonner"
+import { ingestMarkdown, kbHealth } from "@/lib/kb-client"
 import {
   FORMAT_META,
   buildExportBlob,
@@ -29,8 +31,37 @@ export default function Home() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [isConverting, setIsConverting] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [sendingToKb, setSendingToKb] = useState(false)
 
   const selected = results[selectedIndex] ?? null
+
+  const handleSendToKb = async () => {
+    if (!selected) return
+    setSendingToKb(true)
+    try {
+      const health = await kbHealth()
+      if (!health) {
+        toast.error("KB sidecar non raggiungibile", {
+          description: "Avvia il sidecar locale (uvicorn) sulla porta 8077.",
+        })
+        return
+      }
+      const res = await ingestMarkdown({
+        markdown: selected.markdown,
+        fileName: selected.name,
+        title: selected.name.replace(/\.pdf$/i, ""),
+      })
+      toast.success("Aggiunto alla Knowledge Base", {
+        description: `${res.chunks} chunk indicizzati (doc ${res.doc_id}).`,
+      })
+    } catch (err) {
+      toast.error("Ingest nella KB fallito", {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setSendingToKb(false)
+    }
+  }
 
   const handleCopy = async () => {
     if (!selected) return
@@ -149,6 +180,26 @@ export default function Home() {
                     <>
                       <Copy className="mr-1.5 h-3.5 w-3.5" />
                       Copy
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendToKb}
+                  disabled={sendingToKb}
+                  className="h-8 px-3 text-sm"
+                  title="Invia al sidecar Knowledge Base locale"
+                >
+                  {sendingToKb ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Database className="mr-1.5 h-3.5 w-3.5" />
+                      Send to KB
                     </>
                   )}
                 </Button>
