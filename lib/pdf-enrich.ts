@@ -13,18 +13,39 @@ export interface EnrichOptions {
   includeAnnotations?: boolean
 }
 
-interface ExtractedImage {
-  data: Uint8Array | Uint8ClampedArray
+/**
+ * Raw image object returned by pdf.js `page.objs.get()`. Depending on the
+ * pdf.js build and browser capabilities the pixels are exposed either as a
+ * decoded `ImageBitmap` (modern path) or as a raw pixel buffer in `data`.
+ */
+interface PdfImageObject {
   width: number
   height: number
-  channels: 1 | 3 | 4
-  key: string
+  bitmap?: ImageBitmap
+  data?: Uint8Array | Uint8ClampedArray | null
+}
+
+/** Draw an already-decoded ImageBitmap onto a canvas and return a PNG data URL. */
+function bitmapToPngDataUrl(bitmap: ImageBitmap, width: number, height: number): string | null {
+  if (typeof document === "undefined") return null
+  const canvas = document.createElement("canvas")
+  canvas.width = width || bitmap.width
+  canvas.height = height || bitmap.height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return null
+  ctx.drawImage(bitmap, 0, 0)
+  return canvas.toDataURL("image/png")
 }
 
 /** Rebuild a PNG data URL from raw pixel data (grayscale, RGB or RGBA). */
-function imageToPngDataUrl(image: ExtractedImage): string | null {
+function rawPixelsToPngDataUrl(
+  data: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+): string | null {
   if (typeof document === "undefined") return null
-  const { data, width, height, channels } = image
+  const channels = data.length / (width * height)
+  if (![1, 3, 4].includes(channels)) return null
   const canvas = document.createElement("canvas")
   canvas.width = width
   canvas.height = height
@@ -53,6 +74,17 @@ function imageToPngDataUrl(image: ExtractedImage): string | null {
   }
   ctx.putImageData(new ImageData(rgba, width, height), 0, 0)
   return canvas.toDataURL("image/png")
+}
+
+/** Convert a pdf.js image object (bitmap or raw pixels) to a PNG data URL. */
+function imageObjectToPngDataUrl(image: PdfImageObject): string | null {
+  if (image.bitmap) {
+    return bitmapToPngDataUrl(image.bitmap, image.width, image.height)
+  }
+  if (image.data) {
+    return rawPixelsToPngDataUrl(image.data, image.width, image.height)
+  }
+  return null
 }
 
 interface PdfAnnotation {
@@ -93,8 +125,8 @@ function formatAnnotations(annotations: PdfAnnotation[]): string[] {
 export async function enrichMarkdown(buffer: Uint8Array, options: EnrichOptions): Promise<string> {
   if (!options.includeImages && !options.includeAnnotations) return ""
 
-  const { extractImages, getDocumentProxy, getResolvedPDFJS } = await import("unpdf")
-  await getResolvedPDFJS()
+  const { getDocumentProxy, getResolvedPDFJS } = await import("unpdf")
+  const { OPS } = await getResolvedPDFJS()
   const pdf = await getDocumentProxy(buffer)
 
   const sections: string[] = []
@@ -103,26 +135,41 @@ export async function enrichMarkdown(buffer: Uint8Array, options: EnrichOptions)
   const annotationLines: string[] = []
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber)
+
     if (options.includeImages) {
       try {
-        const images = (await extractImages(pdf, pageNumber)) as unknown as ExtractedImage[]
-        console.log("[enrich] page", pageNumber, "images:", images?.length, images?.map((i) => ({ w: i.width, h: i.height, ch: i.channels, key: i.key })))
-        for (const image of images) {
-          if (seenImageKeys.has(image.key)) continue
-          seenImageKeys.add(image.key)
-          const dataUrl = imageToPngDataUrl(image)
+        const opList = await page.getOperatorList()
+        for (let i = 0; i < opList.fnArray.length; i++) {
+          const op = opList.fnArray[i]
+          if (op !== OPS.paintImageXObject && op !== OPS.paintInlineImageXObject) continue
+          const arg = opList.argsArray[i][0]
+          // Inline images carry the object directly; XObjects carry a string key.
+          let image: PdfImageObject | null = null
+          let dedupeKey: string
+          if (typeof arg === "string") {
+            dedupeKey = arg
+            if (seenImageKeys.has(dedupeKey)) continue
+            const objs = arg.startsWith("g_") ? page.commonObjs : page.objs
+            image = await new Promise<PdfImageObject>((resolve) => objs.get(arg, resolve))
+          } else {
+            image = arg as PdfImageObject
+            dedupeKey = `inline_${pageNumber}_${i}`
+          }
+          seenImageKeys.add(dedupeKey)
+          if (!image) continue
+          const dataUrl = imageObjectToPngDataUrl(image)
           if (dataUrl) {
             imageRefs.push(`![Image from page ${pageNumber}](${dataUrl})`)
           }
         }
-      } catch (e) {
-        console.error("[enrich] extractImages failed on page", pageNumber, e)
+      } catch {
+        // Skip pages whose images cannot be decoded.
       }
     }
 
     if (options.includeAnnotations) {
       try {
-        const page = await pdf.getPage(pageNumber)
         const annotations = (await page.getAnnotations()) as PdfAnnotation[]
         annotationLines.push(...formatAnnotations(annotations))
       } catch {
