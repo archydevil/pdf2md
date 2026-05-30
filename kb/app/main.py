@@ -22,8 +22,8 @@ from pydantic import BaseModel
 from app.analysis.engine import AnalysisEngine, list_templates
 from app.bridges.meetily import import_sqlite
 from app.config import get_settings
+from app.bridges import stt
 from app.ollama_client import OllamaClient
-from app.pipeline.chat import ChatEngine
 from app.pipeline.ingest import Ingestor
 from app.pipeline.parse import parse_file_async, parse_markdown
 from app.pipeline.retrieve import Retriever

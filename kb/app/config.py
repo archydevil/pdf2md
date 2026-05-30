@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     top_k: int = Field(default=8)
     rerank_enabled: bool = Field(default=False)
 
+    # --- STT (Fase 5) ------------------------------------------------------
+    whisper_bin: str = Field(default="whisper-cli")
+    whisper_model: str = Field(default="ggml-large-v3.bin")
+    ffmpeg_bin: str = Field(default="ffmpeg")
+    faster_whisper_model: str = Field(default="base", description="faster-whisper size/path")
+    stt_language: str = Field(default="auto")
+
     # --- Privacy / egress --------------------------------------------------
     # Hard air-gap switch. When False, the egress gateway refuses every
     # outbound cloud call regardless of per-request flags.
