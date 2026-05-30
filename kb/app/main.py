@@ -27,6 +27,8 @@ from app.pipeline.chat import ChatEngine
 from app.pipeline.ingest import Ingestor
 from app.pipeline.parse import parse_file_async, parse_markdown
 from app.pipeline.retrieve import Retriever
+from app.privacy.anonymize import anonymize
+from app.privacy.egress import EgressDenied, prepare_egress
 from app.schema import SourceKind
 from app.store.lancedb_store import KBStore
 
@@ -89,8 +91,6 @@ class MeetilyImportBody(BaseModel):
 
 
 @app.get("/health")
-async def health() -> dict:
-    return {"ok": True, "ollama": await _ollama.health(), "model": get_settings().llm_model}
 
 
 @app.get("/stats")
