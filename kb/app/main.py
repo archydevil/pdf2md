@@ -90,7 +90,20 @@ class MeetilyImportBody(BaseModel):
     contextualize: bool = False
 
 
+class AnonymizeBody(BaseModel):
+    text: str
+    language: str = "it"
+
+
+class EgressBody(BaseModel):
+    text: str
+    language: str = "it"
+    require_approval: bool = True
+
+
 @app.get("/health")
+async def health() -> dict:
+    return {"ok": True, "ollama": await _ollama.health(), "model": get_settings().llm_model}
 
 
 @app.get("/stats")
@@ -201,3 +214,35 @@ async def meetily_import(body: MeetilyImportBody) -> dict:
         )
         imported.append({"meeting_id": meeting.meeting_id, "chunks": result.n_chunks})
     return {"meetings": imported}
+
+
+@app.post("/privacy/anonymize")
+async def privacy_anonymize(body: AnonymizeBody) -> dict:
+    result = anonymize(body.text, language=body.language)
+    return {
+        "text": result.text,
+        "degraded": result.degraded,
+        "entities": result.entities,
+        "n_redacted": len(result.mapping),
+    }
+
+
+@app.post("/privacy/egress/preview")
+async def privacy_egress_preview(body: EgressBody) -> dict:
+    """Anonymize + validate egress without sending anything.
+
+    Returns 403 when the air-gap switch is on (KB_ALLOW_CLOUD_EGRESS=false).
+    """
+    try:
+        envelope = prepare_egress(
+            body.text, language=body.language, require_approval=body.require_approval
+        )
+    except EgressDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {
+        "safe_text": envelope.safe_text,
+        "approved": envelope.approved,
+        "degraded": envelope.anonymization.degraded,
+        "n_redacted": len(envelope.anonymization.mapping),
+    }
+
