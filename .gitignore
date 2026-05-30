@@ -38,3 +38,9 @@ kb/.kbdata/
 **/__pycache__/
 *.pyc
 .pytest_cache/
+
+# third-party installers / large local binaries
+*.dmg
+*.msi
+*.AppImage
+*.exe
