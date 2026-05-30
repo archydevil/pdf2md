@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+release
+.git
+.github
+.vscode
+kb/.venv
+kb/.kbdata
+**/__pycache__
+**/.pytest_cache
+*.log
+.env*
+.DS_Store
+docker
+Dockerfile
+.dockerignore
