@@ -77,6 +77,8 @@ class ChatBody(BaseModel):
     rerank: bool | None = None
     model: str | None = None
     provider: str = "local"  # "local" (Ollama) or "cloud" (gated by egress policy)
+    cloud_base_url: str | None = None  # per-request override (OpenAI-compatible)
+    cloud_api_key: str | None = None  # supplying a key = explicit consent to egress
 
 
 class AnalysisBody(BaseModel):
@@ -216,6 +218,8 @@ async def chat(body: ChatBody) -> dict:
             rerank=body.rerank,
             model=body.model,
             provider=body.provider,
+            cloud_base_url=body.cloud_base_url,
+            cloud_api_key=body.cloud_api_key,
         )
     except EgressDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

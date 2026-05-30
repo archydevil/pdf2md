@@ -13,7 +13,8 @@ from app.cloud_client import CloudClient
 from app.config import get_settings
 from app.ollama_client import OllamaClient
 from app.pipeline.retrieve import Retriever
-from app.privacy.egress import EgressDenied, prepare_egress
+from app.privacy.anonymize import anonymize
+from app.privacy.egress import EgressDenied
 from app.schema import RetrievedChunk
 
 _SYSTEM = (
@@ -79,6 +80,8 @@ class ChatEngine:
         rerank: bool | None = None,
         model: str | None = None,
         provider: str = "local",
+        cloud_base_url: str | None = None,
+        cloud_api_key: str | None = None,
     ) -> ChatAnswer:
         chunks = await self.retriever.search(query, k=k, where=where, rerank=rerank)
         if not chunks:
@@ -90,33 +93,61 @@ class ChatEngine:
             "Rispondi in italiano, citando i passaggi con [n]."
         )
         if provider == "cloud":
-            text = await self._answer_cloud(prompt, model=model)
+            text = await self._answer_cloud(
+                prompt,
+                model=model,
+                base_url=cloud_base_url,
+                api_key=cloud_api_key,
+            )
         else:
             text = await self.ollama.generate(
                 prompt, system=_SYSTEM, temperature=0.1, model=model
             )
         return ChatAnswer(answer=text, citations=citations)
 
-    async def _answer_cloud(self, prompt: str, model: str | None = None) -> str:
+    async def _answer_cloud(
+        self,
+        prompt: str,
+        model: str | None = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> str:
         """Send to the cloud provider, gated by the egress policy.
 
-        With ``cloud_anonymize`` on (default), the prompt is anonymized via the
-        egress gateway before leaving the machine and the answer is restored
-        with the reversible mapping. The gateway raises ``EgressDenied`` when the
-        air-gap switch (``KB_ALLOW_CLOUD_EGRESS``) is off.
+        Credentials may come from the environment (``KB_CLOUD_*``) or be supplied
+        per-request from the UI. Providing an API key for the request counts as
+        explicit consent to leave the machine for that call; otherwise the
+        master switch ``KB_ALLOW_CLOUD_EGRESS`` must be on. Either way, with
+        ``cloud_anonymize`` on (default) the prompt is anonymized before sending
+        and the answer is restored with the reversible mapping.
         """
         settings = get_settings()
+        # Per-request credentials override the env-configured client.
+        client = (
+            CloudClient(base_url=base_url, api_key=api_key)
+            if (base_url or api_key)
+            else self.cloud
+        )
+        explicit_consent = bool(api_key)
+
         if settings.cloud_anonymize:
-            envelope = prepare_egress(prompt, require_approval=False)
-            raw = await self.cloud.generate(
-                envelope.safe_text, system=_SYSTEM, temperature=0.1, model=model
+            if not (settings.allow_cloud_egress or explicit_consent):
+                raise EgressDenied(
+                    "Egress verso il cloud disabilitato (air-gap). "
+                    "Inserisci una API key nelle impostazioni cloud o imposta "
+                    "KB_ALLOW_CLOUD_EGRESS=true."
+                )
+            anon = anonymize(prompt, language="it")
+            raw = await client.generate(
+                anon.text, system=_SYSTEM, temperature=0.1, model=model
             )
-            return envelope.restore(raw)
-        if not settings.allow_cloud_egress:
+            return anon.deanonymize(raw)
+        if not (settings.allow_cloud_egress or explicit_consent):
             raise EgressDenied(
                 "Egress verso il cloud disabilitato (air-gap). "
-                "Imposta KB_ALLOW_CLOUD_EGRESS=true per consentirlo."
+                "Inserisci una API key nelle impostazioni cloud o imposta "
+                "KB_ALLOW_CLOUD_EGRESS=true."
             )
-        return await self.cloud.generate(
+        return await client.generate(
             prompt, system=_SYSTEM, temperature=0.1, model=model
         )

@@ -68,3 +68,28 @@ def test_cloud_raw_when_anonymize_disabled(monkeypatch):
     # Anonymization off -> prompt sent verbatim.
     assert captured["sent"] == "Domanda semplice"
     _reset_settings()
+
+
+def test_per_request_api_key_is_explicit_consent(monkeypatch):
+    # Air-gap is ON, but supplying an API key for the request grants consent.
+    _reset_settings()
+    monkeypatch.setenv("KB_ALLOW_CLOUD_EGRESS", "false")
+    monkeypatch.setenv("KB_CLOUD_ANONYMIZE", "true")
+    _reset_settings()
+    captured: dict = {}
+    engine = chatmod.ChatEngine.__new__(chatmod.ChatEngine)
+
+    class _StubCloud:
+        async def generate(self, prompt, *, system=None, model=None, temperature=0.0):
+            captured["sent"] = prompt
+            return "ok"
+
+    # No env-configured client; per-request key drives a fresh CloudClient.
+    monkeypatch.setattr(chatmod, "CloudClient", lambda **kw: _StubCloud())
+    engine.cloud = _StubCloud()
+    out = asyncio.run(
+        engine._answer_cloud("Ciao", api_key="sk-test", base_url="https://x/v1")
+    )
+    assert out == "ok"
+    assert "sent" in captured
+    _reset_settings()

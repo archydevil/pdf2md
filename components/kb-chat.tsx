@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Database, Send, Loader2, MessageSquare, Cloud, HardDrive } from "lucide-react"
+import { Database, Send, Loader2, MessageSquare, Cloud, HardDrive, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   kbChat,
@@ -26,7 +26,43 @@ export function KbChat() {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [provider, setProvider] = useState<"local" | "cloud">("local")
+  const [showSettings, setShowSettings] = useState(false)
+  const [cloudBaseUrl, setCloudBaseUrl] = useState("https://api.openai.com/v1")
+  const [cloudApiKey, setCloudApiKey] = useState("")
+  const [cloudModel, setCloudModel] = useState("gpt-4o-mini")
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Load persisted cloud settings (local only; not sent anywhere but the local sidecar).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("kb-cloud-settings")
+      if (raw) {
+        const s = JSON.parse(raw)
+        if (s.baseUrl) setCloudBaseUrl(s.baseUrl)
+        if (s.model) setCloudModel(s.model)
+        if (s.apiKey) setCloudApiKey(s.apiKey)
+        if (s.provider === "cloud") setProvider("cloud")
+      }
+    } catch {
+      // ignore malformed storage
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "kb-cloud-settings",
+        JSON.stringify({
+          baseUrl: cloudBaseUrl,
+          model: cloudModel,
+          apiKey: cloudApiKey,
+          provider,
+        }),
+      )
+    } catch {
+      // ignore storage quota / disabled storage
+    }
+  }, [cloudBaseUrl, cloudModel, cloudApiKey, provider])
 
   useEffect(() => {
     let cancelled = false
@@ -56,7 +92,18 @@ export function KbChat() {
     setTurns((prev) => [...prev, { role: "user", content: query }])
     setLoading(true)
     try {
-      const res = await kbChat({ query, rerank: true, provider })
+      const res = await kbChat({
+        query,
+        rerank: true,
+        provider,
+        ...(provider === "cloud"
+          ? {
+              cloudBaseUrl: cloudBaseUrl.trim() || undefined,
+              cloudApiKey: cloudApiKey.trim() || undefined,
+              model: cloudModel.trim() || undefined,
+            }
+          : {}),
+      })
       setTurns((prev) => [
         ...prev,
         { role: "assistant", content: res.answer, citations: res.citations },
@@ -124,6 +171,21 @@ export function KbChat() {
             )}
             {provider === "cloud" ? "Cloud" : "Locale"}
           </button>
+          {provider === "cloud" && (
+            <button
+              type="button"
+              onClick={() => setShowSettings((s) => !s)}
+              title="Impostazioni cloud (endpoint, API key, modello)"
+              className={cn(
+                "flex items-center rounded-full border px-1.5 py-0.5 transition-colors",
+                showSettings
+                  ? "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                  : "border-border hover:bg-muted",
+              )}
+            >
+              <Settings className="h-3 w-3" />
+            </button>
+          )}
           <span
             className={cn(
               "h-1.5 w-1.5 rounded-full",
@@ -133,6 +195,46 @@ export function KbChat() {
           {chunks !== null ? `${chunks} chunk` : online ? "online" : "…"}
         </div>
       </div>
+
+      {provider === "cloud" && showSettings && (
+        <div className="space-y-2 border-b border-border bg-muted/20 px-4 py-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Endpoint (OpenAI-compatible)
+            </label>
+            <Input
+              value={cloudBaseUrl}
+              onChange={(e) => setCloudBaseUrl(e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">API key</label>
+            <Input
+              type="password"
+              value={cloudApiKey}
+              onChange={(e) => setCloudApiKey(e.target.value)}
+              placeholder="sk-…"
+              autoComplete="off"
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Modello</label>
+            <Input
+              value={cloudModel}
+              onChange={(e) => setCloudModel(e.target.value)}
+              placeholder="gpt-4o-mini"
+              className="h-8 text-xs"
+            />
+          </div>
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Le credenziali restano nel browser e vengono inviate solo al sidecar
+            locale. Le PII vengono anonimizzate prima dell&apos;invio al cloud.
+          </p>
+        </div>
+      )}
 
       <ScrollArea className="h-[360px] w-full">
         <div ref={scrollRef} className="flex flex-col gap-4 p-4">
