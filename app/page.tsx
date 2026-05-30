@@ -15,6 +15,7 @@ import { FileText, Code, Download, Copy, Check, Archive, ChevronDown, Database, 
 import { FaqSection } from "@/components/faq-section"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { GitHubStarButton } from "@/components/github-star-button"
+import { KbChat } from "@/components/kb-chat"
 import { toast } from "sonner"
 import { ingestMarkdown, kbHealth } from "@/lib/kb-client"
 import {
@@ -294,6 +295,11 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        {/* Knowledge Base chat */}
+        <section className="mb-16">
+          <KbChat />
+        </section>
 
         {/* FAQ */}
         <section className="mb-16">

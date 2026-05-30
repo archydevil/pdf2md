@@ -23,8 +23,9 @@ from app.analysis.engine import AnalysisEngine, list_templates
 from app.bridges.meetily import import_sqlite
 from app.config import get_settings
 from app.ollama_client import OllamaClient
+from app.pipeline.chat import ChatEngine
 from app.pipeline.ingest import Ingestor
-from app.pipeline.parse import parse_file, parse_markdown
+from app.pipeline.parse import parse_file_async, parse_markdown
 from app.pipeline.retrieve import Retriever
 from app.schema import SourceKind
 from app.store.lancedb_store import KBStore
@@ -49,6 +50,7 @@ _ollama = OllamaClient()
 _ingestor = Ingestor(store=_store, ollama=_ollama)
 _retriever = Retriever(store=_store, ollama=_ollama)
 _analysis = AnalysisEngine(ollama=_ollama)
+_chat = ChatEngine(retriever=_retriever, ollama=_ollama)
 
 
 class IngestMarkdownBody(BaseModel):
@@ -63,6 +65,15 @@ class SearchBody(BaseModel):
     query: str
     k: int = 8
     where: str | None = None
+    rerank: bool | None = None
+
+
+class ChatBody(BaseModel):
+    query: str
+    k: int = 6
+    where: str | None = None
+    rerank: bool | None = None
+    model: str | None = None
 
 
 class AnalysisBody(BaseModel):
@@ -107,7 +118,8 @@ async def ingest_file(
         tmp.write(await file.read())
         tmp.flush()
         try:
-            parsed = parse_file(Path(tmp.name))
+            parsed = parse_file_async(Path(tmp.name))
+            parsed = await parsed
         except RuntimeError as exc:
             raise HTTPException(status_code=415, detail=str(exc)) from exc
     result = await _ingestor.ingest(
@@ -118,19 +130,42 @@ async def ingest_file(
 
 @app.post("/search")
 async def search(body: SearchBody) -> dict:
-    hits = await _retriever.search(body.query, k=body.k, where=body.where)
+    hits = await _retriever.search(body.query, k=body.k, where=body.where, rerank=body.rerank)
     return {
         "query": body.query,
         "results": [
             {
                 "id": h.chunk.id,
                 "score": h.score,
+                "rerank_score": h.rerank_score,
                 "text": h.chunk.text,
                 "context": h.chunk.context_prefix,
                 "source": h.chunk.provenance.model_dump(),
                 "classification": h.chunk.classification.model_dump(),
             }
             for h in hits
+        ],
+    }
+
+
+@app.post("/chat")
+async def chat(body: ChatBody) -> dict:
+    result = await _chat.answer(
+        body.query, k=body.k, where=body.where, rerank=body.rerank, model=body.model
+    )
+    return {
+        "query": body.query,
+        "answer": result.answer,
+        "citations": [
+            {
+                "n": c.n,
+                "chunk_id": c.chunk_id,
+                "file_name": c.file_name,
+                "section_path": c.section_path,
+                "page": c.page,
+                "text": c.text,
+            }
+            for c in result.citations
         ],
     }
 

@@ -21,7 +21,16 @@ _EXT_KIND = {
     ".html": SourceKind.html,
     ".htm": SourceKind.html,
     ".eml": SourceKind.email,
+    ".png": SourceKind.image,
+    ".jpg": SourceKind.image,
+    ".jpeg": SourceKind.image,
+    ".tif": SourceKind.image,
+    ".tiff": SourceKind.image,
+    ".bmp": SourceKind.image,
+    ".webp": SourceKind.image,
 }
+
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
 
 def detect_kind(path: Path) -> SourceKind:
@@ -75,6 +84,21 @@ def parse_file(path: Path) -> ParseResult:
 def parse_markdown(markdown: str, title: str | None, kind: SourceKind) -> ParseResult:
     """Entry point for content already converted to Markdown (e.g. by pdf2md)."""
     return ParseResult(markdown, kind, title, {"parser": "external"})
+
+
+async def parse_file_async(path: Path) -> ParseResult:
+    """Async variant that additionally handles images via OCR.
+
+    Falls back to the synchronous :func:`parse_file` for non-image inputs.
+    """
+    if path.suffix.lower() in _IMAGE_EXTS:
+        from app.pipeline.ocr import ocr_image
+
+        text = await ocr_image(path)
+        title = path.stem
+        md = f"# {title}\n\n{text}".strip()
+        return ParseResult(md, SourceKind.image, title, {"parser": "ocr"})
+    return parse_file(path)
 
 
 def _parse_with_docling(path: Path) -> str | None:

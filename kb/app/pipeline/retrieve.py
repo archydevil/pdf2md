@@ -4,7 +4,9 @@ models answer well, by maximizing the relevance of the small context window.
 """
 from __future__ import annotations
 
+from app.config import get_settings
 from app.ollama_client import OllamaClient
+from app.pipeline.rerank import Reranker
 from app.schema import RetrievedChunk
 from app.store.lancedb_store import KBStore
 
@@ -33,9 +35,14 @@ class Retriever:
     def __init__(self, store: KBStore | None = None, ollama: OllamaClient | None = None) -> None:
         self.store = store or KBStore()
         self.ollama = ollama or OllamaClient()
+        self.reranker = Reranker(self.ollama)
 
     async def search(
-        self, query: str, k: int = 8, where: str | None = None
+        self,
+        query: str,
+        k: int = 8,
+        where: str | None = None,
+        rerank: bool | None = None,
     ) -> list[RetrievedChunk]:
         # Dense
         vec = (await self.ollama.embed([query]))[0]
@@ -44,4 +51,8 @@ class Retriever:
         sparse = self.store.search_text(query, k=k * 3, where=where)
         # Fuse
         fused = reciprocal_rank_fusion([dense, sparse])
+        use_rerank = get_settings().rerank_enabled if rerank is None else rerank
+        if use_rerank:
+            # Rerank a wider candidate pool, then keep the best k.
+            return await self.reranker.rerank(query, fused[: k * 3], top_k=k)
         return fused[:k]

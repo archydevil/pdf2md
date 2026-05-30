@@ -67,3 +67,55 @@ export async function ingestMarkdown(params: {
   }
   return (await res.json()) as KBIngestResponse
 }
+
+export interface KBCitation {
+  n: number
+  chunk_id: string
+  file_name: string
+  section_path: string[]
+  page: number | null
+  text: string
+}
+
+export interface KBChatResponse {
+  query: string
+  answer: string
+  citations: KBCitation[]
+}
+
+export async function kbChat(params: {
+  query: string
+  k?: number
+  rerank?: boolean
+}): Promise<KBChatResponse> {
+  const res = await fetch(`${KB_BASE_URL}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: params.query,
+      k: params.k ?? 6,
+      rerank: params.rerank ?? true,
+    }),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`KB chat failed (${res.status}): ${detail}`)
+  }
+  return (await res.json()) as KBChatResponse
+}
+
+export interface KBStats {
+  chunks: number
+  lancedb_dir: string
+}
+
+export async function kbStats(): Promise<KBStats | null> {
+  try {
+    const res = await withTimeout(fetch(`${KB_BASE_URL}/stats`), 2500)
+    if (!res.ok) return null
+    return (await res.json()) as KBStats
+  } catch {
+    return null
+  }
+}
+
