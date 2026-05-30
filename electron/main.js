@@ -79,7 +79,6 @@ function createWindow() {
 app.whenReady().then(() => {
   protocol.handle("app", (request) => {
     const filePath = resolveFilePath(request.url)
-    console.log("[app://]", request.url, "->", filePath)
     return net.fetch(pathToFileURL(filePath).toString())
   })
 

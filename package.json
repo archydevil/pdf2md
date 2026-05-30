@@ -2,6 +2,8 @@
   "name": "pdf2md",
   "version": "0.1.0",
   "private": true,
+  "description": "Convert PDF files to Markdown, plain text or Word locally, fully offline.",
+  "author": "Michael Ryaboy",
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
