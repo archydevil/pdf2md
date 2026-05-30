@@ -245,4 +245,3 @@ async def privacy_egress_preview(body: EgressBody) -> dict:
         "degraded": envelope.anonymization.degraded,
         "n_redacted": len(envelope.anonymization.mapping),
     }
-
