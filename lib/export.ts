@@ -1,4 +1,4 @@
-import type { ISectionOptions } from "docx"
+import type { ISectionOptions, Paragraph as ParagraphType } from "docx"
 
 export type ExportFormat = "md" | "txt" | "docx"
 
@@ -89,7 +89,7 @@ export async function markdownToDocxBlob(markdown: string): Promise<Blob> {
   ]
 
   const lines = markdown.replace(/\r\n/g, "\n").split("\n")
-  const paragraphs: Paragraph[] = []
+  const paragraphs: ParagraphType[] = []
   let inCodeBlock = false
 
   const toRuns = (text: string) =>

@@ -2,11 +2,19 @@
   "name": "pdf2md",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "desktop:export": "cross-env BUILD_TARGET=desktop next build",
+    "desktop": "npm run desktop:export && electron .",
+    "desktop:dev": "cross-env ELECTRON_START_URL=http://localhost:3000 electron .",
+    "dist": "npm run desktop:export && electron-builder",
+    "dist:mac": "npm run desktop:export && electron-builder --mac",
+    "dist:win": "npm run desktop:export && electron-builder --win",
+    "dist:all": "npm run desktop:export && electron-builder --mac --win"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -73,6 +81,9 @@
     "@types/react-dom": "^19",
     "@typescript-eslint/eslint-plugin": "^8.50.1",
     "@typescript-eslint/parser": "^8.50.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.7.1",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.1",
     "eslint-plugin-react": "^7.37.5",
@@ -80,5 +91,43 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "co.pdftomarkdown.app",
+    "productName": "PDF to Markdown",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "out/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Utility"
+    }
   }
 }
