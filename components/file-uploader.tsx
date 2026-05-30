@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Upload, File as FileIcon, AlertCircle, CheckCircle2, Loader2, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
+import { Checkbox } from "@/components/ui/checkbox"
 import { usePdf2md } from "@/hooks/use-pdf2md"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -35,6 +36,8 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
   const [dragActive, setDragActive] = useState(false)
   const [items, setItems] = useState<FileItem[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [includeImages, setIncludeImages] = useState(false)
+  const [includeAnnotations, setIncludeAnnotations] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { ready, loadError, convert } = usePdf2md()
@@ -123,7 +126,7 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
     for (const item of items) {
       setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, status: "converting" } : it)))
       try {
-        const markdown = await convert(item.file)
+        const markdown = await convert(item.file, { includeImages, includeAnnotations })
         results.push({ name: item.file.name, markdown })
         setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, status: "done", markdown } : it)))
       } catch (err) {
@@ -224,6 +227,25 @@ export function FileUploader({ onConversionComplete, isConverting, setIsConverti
             onChange={handleChange}
           />
         </div>
+
+        {!isConverting && (
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-border pt-4">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <Checkbox
+                checked={includeImages}
+                onCheckedChange={(checked) => setIncludeImages(checked === true)}
+              />
+              Include images
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <Checkbox
+                checked={includeAnnotations}
+                onCheckedChange={(checked) => setIncludeAnnotations(checked === true)}
+              />
+              Include form fields &amp; annotations
+            </label>
+          </div>
+        )}
       </div>
 
       {/* File queue */}

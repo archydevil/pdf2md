@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { enrichMarkdown, type EnrichOptions } from "@/lib/pdf-enrich"
 
 /**
  * Loads the @opendocsg/pdf2md library on the client and exposes a `convert`
@@ -32,14 +33,21 @@ export function usePdf2md() {
     }
   }, [])
 
-  const convert = async (file: File): Promise<string> => {
+  const convert = async (file: File, options: EnrichOptions = {}): Promise<string> => {
     if (!pdf2mdRef.current) {
       throw new Error("Conversion library is not loaded yet.")
     }
     // pdf.js expects a Uint8Array/Buffer, not a raw ArrayBuffer, otherwise it
-    // throws "Invalid PDF structure".
-    const buffer = new Uint8Array(await file.arrayBuffer())
-    return pdf2mdRef.current(buffer)
+    // throws "Invalid PDF structure". Each consumer needs its own buffer because
+    // pdf.js detaches the underlying ArrayBuffer while parsing.
+    const markdown = await pdf2mdRef.current(new Uint8Array(await file.arrayBuffer()))
+
+    if (options.includeImages || options.includeAnnotations) {
+      const extras = await enrichMarkdown(new Uint8Array(await file.arrayBuffer()), options)
+      return markdown + extras
+    }
+
+    return markdown
   }
 
   return { ready, loadError, convert }

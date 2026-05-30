@@ -35,10 +35,13 @@ export function FaqSection() {
             <ul className="list-disc pl-5 space-y-1">
               <li>Complex layouts may not be preserved exactly</li>
               <li>Tables might not convert perfectly, especially with merged cells</li>
-              <li>Images are not included in the Markdown output</li>
-              <li>Forms, annotations, and comments are not supported</li>
               <li>Multi-column documents may have text flow issues</li>
             </ul>
+            <p className="mt-2">
+              <strong>Images</strong> and <strong>form fields, annotations &amp; comments</strong> are now
+              supported via the optional checkboxes under the upload area. Images are embedded directly in the
+              Markdown as base64, so the output file can get large.
+            </p>
             <p className="mt-2">For best results, use PDFs with simple layouts and primarily text content.</p>
           </AccordionContent>
         </AccordionItem>
@@ -55,6 +58,8 @@ export function FaqSection() {
               <li>Simple tables</li>
               <li>Bold and italic text (when detectable)</li>
               <li>Links (when properly embedded)</li>
+              <li>Embedded images (optional, embedded as base64)</li>
+              <li>Form field values, annotations &amp; comments (optional)</li>
             </ul>
             <p className="mt-2">
               Colors, fonts, text size, and alignment are not preserved in Markdown.
