@@ -106,6 +106,7 @@ export async function enrichMarkdown(buffer: Uint8Array, options: EnrichOptions)
     if (options.includeImages) {
       try {
         const images = (await extractImages(pdf, pageNumber)) as unknown as ExtractedImage[]
+        console.log("[enrich] page", pageNumber, "images:", images?.length, images?.map((i) => ({ w: i.width, h: i.height, ch: i.channels, key: i.key })))
         for (const image of images) {
           if (seenImageKeys.has(image.key)) continue
           seenImageKeys.add(image.key)
@@ -114,8 +115,8 @@ export async function enrichMarkdown(buffer: Uint8Array, options: EnrichOptions)
             imageRefs.push(`![Image from page ${pageNumber}](${dataUrl})`)
           }
         }
-      } catch {
-        // Skip pages whose images cannot be decoded.
+      } catch (e) {
+        console.error("[enrich] extractImages failed on page", pageNumber, e)
       }
     }
 
