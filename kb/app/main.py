@@ -16,14 +16,16 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.analysis.engine import AnalysisEngine, list_templates
+from app.bridges import stt
 from app.bridges.meetily import import_sqlite
 from app.config import get_settings
-from app.bridges import stt
 from app.ollama_client import OllamaClient
+from app.pipeline.chat import ChatEngine
 from app.pipeline.ingest import Ingestor
 from app.pipeline.parse import parse_file_async, parse_markdown
 from app.pipeline.retrieve import Retriever
@@ -139,6 +141,45 @@ async def ingest_file(
         parsed, file.filename or "upload", classify=classify, contextualize=contextualize
     )
     return {"doc_id": result.doc.doc_id, "chunks": result.n_chunks}
+
+
+@app.post("/ingest/audio")
+async def ingest_audio(
+    file: UploadFile = File(...),
+    language: str | None = Form(None),
+    classify: bool = Form(True),
+    contextualize: bool = Form(False),
+) -> dict:
+    """Transcribe an audio/video file (whisper.cpp or faster-whisper) and ingest it."""
+    s = get_settings()
+    suffix = Path(file.filename or "audio").suffix or ".wav"
+    with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp.flush()
+        try:
+            segments = await run_in_threadpool(
+                stt.transcribe,
+                tmp.name,
+                whisper_bin=s.whisper_bin,
+                model_path=s.whisper_model,
+                ffmpeg_bin=s.ffmpeg_bin,
+                language=language or s.stt_language,
+                faster_model=s.faster_whisper_model,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    title = Path(file.filename or "audio").stem
+    markdown = stt.segments_to_markdown(segments, title)
+    parsed = parse_markdown(markdown, title, SourceKind.transcript)
+    result = await _ingestor.ingest(
+        parsed, file.filename or "audio.wav", classify=classify, contextualize=contextualize
+    )
+    return {
+        "doc_id": result.doc.doc_id,
+        "chunks": result.n_chunks,
+        "segments": len(segments),
+        "transcript": markdown,
+    }
 
 
 @app.post("/search")

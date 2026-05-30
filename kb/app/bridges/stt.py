@@ -125,7 +125,7 @@ def transcribe_faster(
 ) -> list[STTSegment]:
     model = _load_faster(model_size)
     lang = None if language in (None, "auto") else language
-    segments, _info = model.transcribe(str(audio_path), language=lang, vad_filter=True)
+    segments, _info = model.transcribe(str(audio_path), language=lang, vad_filter=True)  # type: ignore[attr-defined]
     return [STTSegment(text=s.text.strip(), t_start=s.start, t_end=s.end) for s in segments]
 
 
