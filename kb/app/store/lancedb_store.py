@@ -149,7 +149,7 @@ class KBStore:
     def all_chunks(self) -> list[Chunk]:
         """Return every stored chunk (for graph building / exports)."""
         try:
-            records = self.table.to_pandas().to_dict("records")
+            records = self.table.to_arrow().to_pylist()
         except Exception:
             return []
-        return [self._to_retrieved({str(k): v for k, v in r.items()}, score=0.0).chunk for r in records]
+        return [self._to_retrieved(r, score=0.0).chunk for r in records]
