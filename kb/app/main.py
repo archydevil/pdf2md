@@ -37,14 +37,11 @@ from app.store.lancedb_store import KBStore
 
 app = FastAPI(title="KB Forge", version="0.1.0")
 
-# Local-only UI (Next.js dev on 3000 / Electron). Air-gap friendly: localhost only.
+# Local UI by default (Next.js dev on 3000 / Electron). Configure KB_CORS_ORIGINS
+# to add your domain when running the sidecar/UI in the cloud.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "app://.",  # Electron packaged origin
-    ],
+    allow_origins=get_settings().cors_origin_list(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +76,9 @@ class ChatBody(BaseModel):
     where: str | None = None
     rerank: bool | None = None
     model: str | None = None
+    provider: str = "local"  # "local" (Ollama) or "cloud" (gated by egress policy)
+    cloud_base_url: str | None = None  # per-request override (OpenAI-compatible)
+    cloud_api_key: str | None = None  # supplying a key = explicit consent to egress
 
 
 class AnalysisBody(BaseModel):
@@ -210,9 +210,19 @@ async def search(body: SearchBody) -> dict:
 
 @app.post("/chat")
 async def chat(body: ChatBody) -> dict:
-    result = await _chat.answer(
-        body.query, k=body.k, where=body.where, rerank=body.rerank, model=body.model
-    )
+    try:
+        result = await _chat.answer(
+            body.query,
+            k=body.k,
+            where=body.where,
+            rerank=body.rerank,
+            model=body.model,
+            provider=body.provider,
+            cloud_base_url=body.cloud_base_url,
+            cloud_api_key=body.cloud_api_key,
+        )
+    except EgressDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return {
         "query": body.query,
         "answer": result.answer,
@@ -244,22 +254,48 @@ async def analysis_run(body: AnalysisBody) -> dict:
     return {"template_id": body.template_id, "markdown": markdown}
 
 
-@app.post("/meetily/import")
-async def meetily_import(body: MeetilyImportBody) -> dict:
-    try:
-        meetings = import_sqlite(body.db_path)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+async def _ingest_meetings(meetings: list, classify: bool, contextualize: bool) -> list[dict]:
     imported = []
     for meeting in meetings:
         parsed = parse_markdown(meeting.to_markdown(), meeting.title or meeting.meeting_id, SourceKind.transcript)
         result = await _ingestor.ingest(
             parsed,
             f"meetily_{meeting.meeting_id}.md",
-            classify=body.classify,
-            contextualize=body.contextualize,
+            classify=classify,
+            contextualize=contextualize,
         )
         imported.append({"meeting_id": meeting.meeting_id, "chunks": result.n_chunks})
+    return imported
+
+
+@app.post("/meetily/import")
+async def meetily_import(body: MeetilyImportBody) -> dict:
+    try:
+        meetings = import_sqlite(body.db_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    imported = await _ingest_meetings(meetings, body.classify, body.contextualize)
+    return {"meetings": imported}
+
+
+@app.post("/meetily/upload")
+async def meetily_upload(
+    file: UploadFile = File(...),
+    classify: bool = Form(True),
+    contextualize: bool = Form(False),
+) -> dict:
+    """Import a Meetily ``meeting_minutes.sqlite`` uploaded directly from the browser."""
+    suffix = Path(file.filename or "meeting_minutes.sqlite").suffix or ".sqlite"
+    with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp.flush()
+        try:
+            meetings = import_sqlite(tmp.name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:  # corrupt / non-Meetily SQLite
+            raise HTTPException(status_code=422, detail=f"SQLite non valido: {exc}") from exc
+        imported = await _ingest_meetings(meetings, classify, contextualize)
     return {"meetings": imported}
 
 

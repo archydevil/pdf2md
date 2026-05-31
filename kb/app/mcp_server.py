@@ -54,9 +54,15 @@ async def kb_search(query: str, k: int = 6, rerank: bool = False) -> list[dict]:
 
 
 @mcp.tool()
-async def kb_chat(query: str, k: int = 6, rerank: bool = False) -> dict:
-    """Answer a question grounded ONLY in the knowledge base, with [n] citations."""
-    result = await _chat.answer(query, k=k, rerank=rerank)
+async def kb_chat(
+    query: str, k: int = 6, rerank: bool = False, provider: str = "local"
+) -> dict:
+    """Answer a question grounded ONLY in the knowledge base, with [n] citations.
+
+    provider: "local" (Ollama, default) or "cloud" (gated by the egress policy:
+    requires KB_ALLOW_CLOUD_EGRESS=true and anonymizes PII before sending).
+    """
+    result = await _chat.answer(query, k=k, rerank=rerank, provider=provider)
     return {
         "answer": result.answer,
         "citations": [

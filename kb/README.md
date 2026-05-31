@@ -56,6 +56,32 @@ ollama pull bge-m3
 ollama pull llama3.1:8b
 ```
 
+## Cloud opzionale (a comando)
+
+Per default tutto gira **locale/air-gapped**. Puoi usare un modello cloud
+quando vuoi, per singola richiesta (`provider: "cloud"` su `/chat`, tool MCP
+`kb_chat`, o il toggle **Locale/Cloud** nel pannello chat). L'uscita passa
+sempre dall'Egress Gateway: con `KB_CLOUD_ANONYMIZE=true` (default) le PII
+vengono sostituite con placeholder reversibili **prima** dell'invio e
+ripristinate nella risposta.
+
+Variabili d'ambiente (prefisso `KB_`):
+
+```bash
+KB_ALLOW_CLOUD_EGRESS=true                 # master switch: senza questo, egress negato (403)
+KB_CLOUD_BASE_URL=https://api.openai.com/v1  # qualsiasi endpoint OpenAI-compatible
+KB_CLOUD_API_KEY=sk-...                     # la tua chiave
+KB_CLOUD_MODEL=gpt-4o-mini
+KB_CLOUD_ANONYMIZE=true                     # anonimizza le PII prima dell'invio
+KB_CORS_ORIGINS=http://localhost:3000,https://tuo-dominio  # se esponi UI/sidecar in cloud
+```
+
+Nota: gli **embeddings restano locali** (bge-m3) perché l'indice è costruito con
+quel modello; il cloud è usato solo per la generazione della risposta.
+
+Il sidecar è un'app FastAPI portabile: puoi eseguirlo dove vuoi (anche su un
+server/cloud) — non è vincolato alla macchina locale.
+
 ## Layout
 
 ```
