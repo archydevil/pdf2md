@@ -23,7 +23,7 @@ def _engine_with_stub_cloud(captured: dict):
             # Echo a placeholder back so we can check de-anonymization.
             return f"Risposta su {prompt.split()[-1]}"
 
-    engine.cloud = _StubCloud()
+    engine.cloud = _StubCloud()  # type: ignore[assignment]
     return engine
 
 
@@ -86,7 +86,7 @@ def test_per_request_api_key_is_explicit_consent(monkeypatch):
 
     # No env-configured client; per-request key drives a fresh CloudClient.
     monkeypatch.setattr(chatmod, "CloudClient", lambda **kw: _StubCloud())
-    engine.cloud = _StubCloud()
+    engine.cloud = _StubCloud()  # type: ignore[assignment]
     out = asyncio.run(
         engine._answer_cloud("Ciao", api_key="sk-test", base_url="https://x/v1")
     )

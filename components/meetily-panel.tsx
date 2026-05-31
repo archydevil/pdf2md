@@ -265,6 +265,8 @@ export function MeetilyPanel() {
               ref={audioInputRef}
               type="file"
               accept="audio/*,video/*"
+              aria-label="Carica file audio o video"
+              title="Carica file audio o video"
               className="hidden"
               onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
             />
@@ -360,6 +362,8 @@ export function MeetilyPanel() {
               ref={dbInputRef}
               type="file"
               accept=".sqlite,.db,.sqlite3,application/x-sqlite3"
+              aria-label="Carica database Meetily SQLite"
+              title="Carica database Meetily SQLite"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0]
@@ -424,8 +428,12 @@ export function MeetilyPanel() {
               trascrizione o documento, usando i template stile Meetily.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs text-muted-foreground">Template</label>
+              <label htmlFor="meetily-template-select" className="text-xs text-muted-foreground">
+                Template
+              </label>
               <select
+                id="meetily-template-select"
+                aria-label="Template di analisi"
                 value={templateId}
                 onChange={(e) => setTemplateId(e.target.value)}
                 className="h-8 rounded-md border border-border bg-background px-2 text-xs"
