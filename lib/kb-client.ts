@@ -127,3 +127,107 @@ export async function kbStats(): Promise<KBStats | null> {
   }
 }
 
+// --- Meetily integration: audio transcription, SQLite import, analysis ---
+
+export interface KBAudioResponse {
+  doc_id: string
+  chunks: number
+  segments: number
+  transcript: string
+}
+
+export async function ingestAudio(params: {
+  file: File
+  language?: string
+  classify?: boolean
+  contextualize?: boolean
+}): Promise<KBAudioResponse> {
+  const form = new FormData()
+  form.append("file", params.file)
+  if (params.language) form.append("language", params.language)
+  form.append("classify", String(params.classify ?? true))
+  form.append("contextualize", String(params.contextualize ?? false))
+  const res = await fetch(`${KB_BASE_URL}/ingest/audio`, {
+    method: "POST",
+    body: form,
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`KB audio ingest failed (${res.status}): ${detail}`)
+  }
+  return (await res.json()) as KBAudioResponse
+}
+
+export interface MeetilyImportedMeeting {
+  meeting_id: string
+  chunks: number
+}
+
+export interface MeetilyImportResponse {
+  meetings: MeetilyImportedMeeting[]
+}
+
+export async function meetilyImport(params: {
+  dbPath: string
+  classify?: boolean
+  contextualize?: boolean
+}): Promise<MeetilyImportResponse> {
+  const res = await fetch(`${KB_BASE_URL}/meetily/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      db_path: params.dbPath,
+      classify: params.classify ?? true,
+      contextualize: params.contextualize ?? false,
+    }),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`Meetily import failed (${res.status}): ${detail}`)
+  }
+  return (await res.json()) as MeetilyImportResponse
+}
+
+export interface AnalysisTemplate {
+  id: string
+  name: string | null
+  description: string | null
+}
+
+export async function analysisTemplates(): Promise<AnalysisTemplate[]> {
+  try {
+    const res = await withTimeout(fetch(`${KB_BASE_URL}/analysis/templates`), 2500)
+    if (!res.ok) return []
+    const data = (await res.json()) as { templates: AnalysisTemplate[] }
+    return data.templates ?? []
+  } catch {
+    return []
+  }
+}
+
+export interface AnalysisRunResponse {
+  template_id: string
+  markdown: string
+}
+
+export async function analysisRun(params: {
+  content: string
+  templateId: string
+  model?: string
+}): Promise<AnalysisRunResponse> {
+  const res = await fetch(`${KB_BASE_URL}/analysis/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: params.content,
+      template_id: params.templateId,
+      ...(params.model ? { model: params.model } : {}),
+    }),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`Analysis run failed (${res.status}): ${detail}`)
+  }
+  return (await res.json()) as AnalysisRunResponse
+}
+

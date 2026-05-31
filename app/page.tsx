@@ -16,6 +16,7 @@ import { FaqSection } from "@/components/faq-section"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { GitHubStarButton } from "@/components/github-star-button"
 import { KbChat } from "@/components/kb-chat"
+import { MeetilyPanel } from "@/components/meetily-panel"
 import { toast } from "sonner"
 import { ingestMarkdown, kbHealth } from "@/lib/kb-client"
 import {
@@ -299,6 +300,11 @@ export default function Home() {
         {/* Knowledge Base chat */}
         <section className="mb-16">
           <KbChat />
+        </section>
+
+        {/* Meetings & Meetily */}
+        <section className="mb-16">
+          <MeetilyPanel />
         </section>
 
         {/* FAQ */}
