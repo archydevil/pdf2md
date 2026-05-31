@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for pdf2md Next.js application
 
 # Base stage with Node.js
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 
 # Install system dependencies needed for pdf processing
 RUN apk add --no-cache \
