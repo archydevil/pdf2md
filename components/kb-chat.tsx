@@ -198,9 +198,31 @@ export function KbChat() {
 
       {provider === "cloud" && showSettings && (
         <div className="space-y-2 border-b border-border bg-muted/20 px-4 py-3">
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setCloudBaseUrl("https://api.openai.com/v1")
+                setCloudModel("gpt-4o-mini")
+              }}
+              className="rounded-md border border-border px-2 py-0.5 text-[11px] hover:bg-muted"
+            >
+              OpenAI
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCloudBaseUrl("https://api.anthropic.com")
+                setCloudModel("claude-3-5-sonnet-20241022")
+              }}
+              className="rounded-md border border-border px-2 py-0.5 text-[11px] hover:bg-muted"
+            >
+              Anthropic (Claude)
+            </button>
+          </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
-              Endpoint (OpenAI-compatible)
+              Endpoint (OpenAI o Anthropic)
             </label>
             <Input
               value={cloudBaseUrl}

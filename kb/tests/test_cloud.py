@@ -93,3 +93,14 @@ def test_per_request_api_key_is_explicit_consent(monkeypatch):
     assert out == "ok"
     assert "sent" in captured
     _reset_settings()
+
+
+def test_anthropic_detection():
+    from app.cloud_client import _is_anthropic
+
+    # Detected by key prefix even with default OpenAI endpoint.
+    assert _is_anthropic("https://api.openai.com/v1", "sk-ant-abc")
+    # Detected by host.
+    assert _is_anthropic("https://api.anthropic.com", "whatever")
+    # Plain OpenAI key/endpoint is not Anthropic.
+    assert not _is_anthropic("https://api.openai.com/v1", "sk-proj-123")
