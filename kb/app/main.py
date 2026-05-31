@@ -254,22 +254,48 @@ async def analysis_run(body: AnalysisBody) -> dict:
     return {"template_id": body.template_id, "markdown": markdown}
 
 
-@app.post("/meetily/import")
-async def meetily_import(body: MeetilyImportBody) -> dict:
-    try:
-        meetings = import_sqlite(body.db_path)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+async def _ingest_meetings(meetings: list, classify: bool, contextualize: bool) -> list[dict]:
     imported = []
     for meeting in meetings:
         parsed = parse_markdown(meeting.to_markdown(), meeting.title or meeting.meeting_id, SourceKind.transcript)
         result = await _ingestor.ingest(
             parsed,
             f"meetily_{meeting.meeting_id}.md",
-            classify=body.classify,
-            contextualize=body.contextualize,
+            classify=classify,
+            contextualize=contextualize,
         )
         imported.append({"meeting_id": meeting.meeting_id, "chunks": result.n_chunks})
+    return imported
+
+
+@app.post("/meetily/import")
+async def meetily_import(body: MeetilyImportBody) -> dict:
+    try:
+        meetings = import_sqlite(body.db_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    imported = await _ingest_meetings(meetings, body.classify, body.contextualize)
+    return {"meetings": imported}
+
+
+@app.post("/meetily/upload")
+async def meetily_upload(
+    file: UploadFile = File(...),
+    classify: bool = Form(True),
+    contextualize: bool = Form(False),
+) -> dict:
+    """Import a Meetily ``meeting_minutes.sqlite`` uploaded directly from the browser."""
+    suffix = Path(file.filename or "meeting_minutes.sqlite").suffix or ".sqlite"
+    with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp.flush()
+        try:
+            meetings = import_sqlite(tmp.name)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:  # corrupt / non-Meetily SQLite
+            raise HTTPException(status_code=422, detail=f"SQLite non valido: {exc}") from exc
+        imported = await _ingest_meetings(meetings, classify, contextualize)
     return {"meetings": imported}
 
 

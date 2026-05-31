@@ -12,6 +12,10 @@ import {
   Import,
   Sparkles,
   Loader2,
+  Copy,
+  Check,
+  Download,
+  UploadCloud,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -19,10 +23,47 @@ import {
   kbStats,
   ingestAudio,
   meetilyImport,
+  meetilyUpload,
   analysisTemplates,
   analysisRun,
   type AnalysisTemplate,
 } from "@/lib/kb-client"
+
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-emerald-500" />
+      ) : (
+        <Copy className="h-3 w-3" />
+      )}
+      {copied ? "Copiato" : "Copia"}
+    </button>
+  )
+}
 
 type Tab = "audio" | "import" | "analysis"
 
@@ -41,6 +82,8 @@ export function MeetilyPanel() {
   const [dbPath, setDbPath] = useState("")
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState<string | null>(null)
+  const [segments, setSegments] = useState<number | null>(null)
+  const dbInputRef = useRef<HTMLInputElement>(null)
 
   // Analysis
   const [templates, setTemplates] = useState<AnalysisTemplate[]>([])
@@ -75,6 +118,7 @@ export function MeetilyPanel() {
     if (!audioFile || transcribing) return
     setError(null)
     setTranscript(null)
+    setSegments(null)
     setTranscribing(true)
     try {
       const res = await ingestAudio({
@@ -82,6 +126,7 @@ export function MeetilyPanel() {
         language: audioLang.trim() || undefined,
       })
       setTranscript(res.transcript)
+      setSegments(res.segments)
       // Offer the transcript as analysis input.
       setAnalysisContent(res.transcript)
     } catch (err) {
@@ -107,6 +152,26 @@ export function MeetilyPanel() {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setImporting(false)
+    }
+  }
+
+  const handleUploadDb = async (file: File) => {
+    if (importing) return
+    setError(null)
+    setImportMsg(null)
+    setImporting(true)
+    try {
+      const res = await meetilyUpload({ file })
+      const total = res.meetings.reduce((acc, m) => acc + m.chunks, 0)
+      setImportMsg(
+        `Caricato "${file.name}": ${res.meetings.length} riunioni (${total} chunk indicizzati).`,
+      )
+      await kbStats()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setImporting(false)
+      if (dbInputRef.current) dbInputRef.current.value = ""
     }
   }
 
@@ -149,6 +214,8 @@ export function MeetilyPanel() {
     { id: "import", label: "Importa Meetily", icon: Import },
     { id: "analysis", label: "Analisi", icon: Sparkles },
   ]
+
+  const selectedTemplate = templates.find((t) => t.id === templateId) ?? null
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -246,20 +313,31 @@ export function MeetilyPanel() {
             </div>
             {transcript && (
               <div className="rounded-md border border-border bg-muted/20">
-                <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
                   <span className="text-xs font-medium text-foreground">
-                    Trascrizione (indicizzata nella KB)
+                    Trascrizione{segments != null ? ` · ${segments} segmenti` : ""} (indicizzata nella KB)
                   </span>
-                  <button
-                    type="button"
-                    className="text-xs text-sky-600 hover:underline dark:text-sky-400"
-                    onClick={() => {
-                      setAnalysisContent(transcript)
-                      setTab("analysis")
-                    }}
-                  >
-                    Usa per analisi →
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <CopyButton text={transcript} />
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => downloadText(`${audioFile?.name ?? "trascrizione"}.md`, transcript)}
+                    >
+                      <Download className="h-3 w-3" />
+                      Scarica
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-sky-600 hover:underline dark:text-sky-400"
+                      onClick={() => {
+                        setAnalysisContent(transcript)
+                        setTab("analysis")
+                      }}
+                    >
+                      Usa per analisi →
+                    </button>
+                  </div>
                 </div>
                 <ScrollArea className="h-[200px]">
                   <pre className="whitespace-pre-wrap p-3 text-xs text-foreground/80">
@@ -275,9 +353,36 @@ export function MeetilyPanel() {
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Importa un database Meetily esistente (<code>meeting_minutes.sqlite</code>).
-              Indica il percorso assoluto del file sul computer dove gira il
-              sidecar.
+              Carica il file dal browser, oppure indica un percorso assoluto sul
+              computer dove gira il sidecar.
             </p>
+            <input
+              ref={dbInputRef}
+              type="file"
+              accept=".sqlite,.db,.sqlite3,application/x-sqlite3"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) handleUploadDb(f)
+              }}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => dbInputRef.current?.click()}
+                disabled={importing}
+              >
+                {importing ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <UploadCloud className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Carica file .sqlite
+              </Button>
+              <span className="text-xs text-muted-foreground">oppure</span>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 value={dbPath}
@@ -299,7 +404,7 @@ export function MeetilyPanel() {
                 ) : (
                   <>
                     <Database className="mr-1.5 h-3.5 w-3.5" />
-                    Importa
+                    Importa da percorso
                   </>
                 )}
               </Button>
@@ -350,6 +455,11 @@ export function MeetilyPanel() {
                 )}
               </Button>
             </div>
+            {selectedTemplate?.description && (
+              <p className="text-xs text-muted-foreground">
+                {selectedTemplate.description}
+              </p>
+            )}
             <textarea
               value={analysisContent}
               onChange={(e) => setAnalysisContent(e.target.value)}
@@ -357,8 +467,26 @@ export function MeetilyPanel() {
               className="h-32 w-full rounded-md border border-border bg-background p-2 text-xs"
             />
             {analysisResult && (
-              <div className="rounded-md border border-border bg-muted/20 p-3">
-                <MarkdownPreview markdown={analysisResult} />
+              <div className="rounded-md border border-border bg-muted/20">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+                  <span className="text-xs font-medium text-foreground">
+                    Risultato · {selectedTemplate?.name || templateId}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <CopyButton text={analysisResult} />
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => downloadText(`${templateId}.md`, analysisResult)}
+                    >
+                      <Download className="h-3 w-3" />
+                      Scarica
+                    </button>
+                  </div>
+                </div>
+                <div className="p-3">
+                  <MarkdownPreview markdown={analysisResult} />
+                </div>
               </div>
             )}
           </div>

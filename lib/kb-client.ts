@@ -188,6 +188,26 @@ export async function meetilyImport(params: {
   return (await res.json()) as MeetilyImportResponse
 }
 
+export async function meetilyUpload(params: {
+  file: File
+  classify?: boolean
+  contextualize?: boolean
+}): Promise<MeetilyImportResponse> {
+  const form = new FormData()
+  form.append("file", params.file)
+  form.append("classify", String(params.classify ?? true))
+  form.append("contextualize", String(params.contextualize ?? false))
+  const res = await fetch(`${KB_BASE_URL}/meetily/upload`, {
+    method: "POST",
+    body: form,
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`Meetily upload failed (${res.status}): ${detail}`)
+  }
+  return (await res.json()) as MeetilyImportResponse
+}
+
 export interface AnalysisTemplate {
   id: string
   name: string | null
