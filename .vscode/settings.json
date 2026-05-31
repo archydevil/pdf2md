@@ -1,0 +1,6 @@
+{
+  // Silence false-positive YAML schema errors raised by the GitHub Actions
+  // extension on virtual `review:` URIs (PR review view). The real workflow
+  // files are validated in CI by actionlint.
+  "github-actions.validate": false
+}
