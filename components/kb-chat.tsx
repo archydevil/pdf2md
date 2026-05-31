@@ -19,6 +19,36 @@ interface ChatTurn {
   citations?: KBCitation[]
 }
 
+function mapKbChatError(
+  err: unknown,
+  provider: "local" | "cloud",
+  cloudBaseUrl: string,
+  cloudApiKey: string,
+): string {
+  const message = err instanceof Error ? err.message : String(err)
+
+  if (provider === "cloud") {
+    const is401 = message.includes("(401)") || message.toLowerCase().includes("unauthorized")
+    const is403 = message.includes("(403)")
+    const isGoogleEndpoint = cloudBaseUrl.includes("generativelanguage.googleapis.com")
+    const isAQToken = cloudApiKey.trim().startsWith("AQ.Ab")
+
+    if (is401 && isGoogleEndpoint && isAQToken) {
+      return "Errore cloud 401: token Google AQ.Ab non valido o scaduto. Rigenera il token e incollalo di nuovo nelle impostazioni Cloud."
+    }
+
+    if (is401) {
+      return "Errore cloud 401: API key/token non valido o scaduto. Controlla endpoint, credenziali e modello selezionato."
+    }
+
+    if (is403) {
+      return "Errore cloud 403: egress bloccato dal sidecar (privacy). Abilita l'egress cloud o usa la modalità Locale."
+    }
+  }
+
+  return err instanceof Error ? `Errore: ${err.message}` : "Errore durante la richiesta alla KB."
+}
+
 export function KbChat() {
   const [online, setOnline] = useState<boolean | null>(null)
   const [chunks, setChunks] = useState<number | null>(null)
@@ -129,10 +159,7 @@ export function KbChat() {
         ...prev,
         {
           role: "assistant",
-          content:
-            err instanceof Error
-              ? `Errore: ${err.message}`
-              : "Errore durante la richiesta alla KB.",
+          content: mapKbChatError(err, provider, cloudBaseUrl, cloudApiKey),
         },
       ])
     } finally {
