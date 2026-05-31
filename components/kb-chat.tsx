@@ -31,6 +31,7 @@ export function KbChat() {
   const [cloudApiKey, setCloudApiKey] = useState("")
   const [cloudModel, setCloudModel] = useState("gpt-4o-mini")
   const scrollRef = useRef<HTMLDivElement>(null)
+  const hydrated = useRef(false)
 
   // Load persisted cloud settings (local only; not sent anywhere but the local sidecar).
   useEffect(() => {
@@ -45,17 +46,30 @@ export function KbChat() {
       }
     } catch {
       // ignore malformed storage
+    } finally {
+      hydrated.current = true
     }
   }, [])
 
   useEffect(() => {
+    // Skip the first run (before hydration) so we never overwrite a stored key
+    // with the default empty value, e.g. when a second tab is open.
+    if (!hydrated.current) return
     try {
+      const prev = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("kb-cloud-settings") || "{}")
+        } catch {
+          return {}
+        }
+      })()
       localStorage.setItem(
         "kb-cloud-settings",
         JSON.stringify({
           baseUrl: cloudBaseUrl,
           model: cloudModel,
-          apiKey: cloudApiKey,
+          // Never clobber a saved key with an empty one (another tab may hold it).
+          apiKey: cloudApiKey || prev.apiKey || "",
           provider,
         }),
       )
@@ -155,7 +169,7 @@ export function KbChat() {
             title={
               provider === "local"
                 ? "Modello locale (Ollama). Clicca per usare il cloud."
-                : "Modello cloud (richiede KB_ALLOW_CLOUD_EGRESS=true; PII anonimizzata prima dell'invio). Clicca per tornare locale."
+                : "Modello cloud. Inserisci una API key nelle impostazioni; le PII vengono anonimizzate prima dell'invio. Clicca per tornare locale."
             }
             className={cn(
               "flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors",
